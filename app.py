@@ -3,15 +3,43 @@ from flask import render_template
 from flask import request
 from flask import Response
 
+
 import json
 import time
 import sys
 import random
 import math
 
+
 import pyorient
 
+
 from Queue import Queue
+
+q = Queue()
+def point_distance(x1, y1, x2, y2):
+    return ((x1-x2)**2.0 + (y1-y2)**2.0)**(0.5)
+def remap(value, min1, max1, min2, max2):
+    return float(min2) + (float(value) - float(min1)) * (float(max2) - float(min2)) / (float(max1) - float(min1)) 
+
+def normalizeArray(inputArray):
+    maxVal = 0
+    minVal = 100000000000
+
+    for j in range(len(inputArray)):
+        for i in range(len(inputArray[j])):
+            if inputArray[j][i] > maxVal:
+                maxVal = inputArray[j][i]
+            if inputArray[j][i] < minVal:
+                minVal = inputArray[j][i]
+
+    for j in range(len(inputArray)):
+        for i in range(len(inputArray[j])):
+            inputArray[j][i] = remap(inputArray[j][i], minVal, maxVal, 0, 1)
+
+    return inputArray
+
+
 
 app = Flask(__name__)
 
@@ -35,8 +63,14 @@ def index():
 @app.route("/getData/")
 def getData():
 
-	q.put("starting data query...")
+	
+	
+	if analysis == "false":
+            q.put('idle')
+            return json.dumps(output)
 
+        q.put("starting data query...")
+        
 	lat1 = str(request.args.get('lat1'))
 	lng1 = str(request.args.get('lng1'))
 	lat2 = str(request.args.get('lat2'))
@@ -44,13 +78,18 @@ def getData():
 
 	w = float(request.args.get('w'))
 	h = float(request.args.get('h'))
-	res = float(request.args.get('res'))
+	
+	cell_size = float(request.args.get('cell_size'))
+	
+	analysis = request.args.get('analysis')
+	
+	
 
 	print "received coordinates: [" + lat1 + ", " + lat2 + "], [" + lng1 + ", " + lng2 + "]"
 	
 	client = pyorient.OrientDB("localhost", 2424)
-	session_id = client.connect("root", "password")
-	db_name = "property_test"
+	session_id = client.connect("root", "A43B7554D92A15A4B8C52F38B1236F0ECA680D07F2B8446E6512A6BDD6CD7D2B")
+	db_name = "soufun"
 	db_username = "admin"
 	db_password = "admin"
 
@@ -86,6 +125,31 @@ def getData():
 
 	numW = int(math.floor(w/res))
 	numH = int(math.floor(h/res))
+	
+	grid = []
+   	for j in range(numH):
+            grid.append([])
+            for i in range(numW):
+                grid[j].append(0)
+	        [ 
+                [0,0,0], 
+                [0,0,0], 
+                [0,0,0] 
+                ]
+            for record in records:
+
+                pos_x = int(remap(record.longitude, lng1, lng2, 0, numW))
+                pos_y = int(remap(record.latitude, lat1, lat2, numH, 0))
+
+                spread = 15
+
+            for j in range(max(0, (pos_y-spread)), min(numH, (pos_y+spread))):
+                for i in range(max(0, (pos_x-spread)), min(numW, (pos_x+spread))):
+               
+                    grid[j][i] += 2 * math.exp((-point_distance(i,j,pos_x,pos_y)**2)/(2*5**2))
+
+      
+            grid = normalizeArray(grid)
 
 	offsetLeft = (w - numW * res) / 2.0 ;
 	offsetTop = (h - numH * res) / 2.0 ;
@@ -111,7 +175,7 @@ def getData():
 			newItem['height'] = res-1
 
 			# newItem['val'] = grid[j][i]
-			newItem['value'] = .5
+			newItem['value'] = grid[j][i]
 
 			output["analysis"].append(newItem)
 
